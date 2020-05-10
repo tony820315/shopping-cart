@@ -1,0 +1,65 @@
+version: '3.7'
+
+services:
+  db:
+    image: postgres:12
+    restart: always
+    environment:
+      POSTGRES_USER: zach
+      POSTGRES_PASSWORD: zach1234
+      POSTGRES_INITDB_ARGS: --auth-local=md5
+    ports:
+      - 5432:5432
+    volumes:
+      - ./postgres/data:/var/lib/postgresql/data/
+      - ./postgres/initdb.d:/docker-entrypoint-initdb.d
+      - ./postgres/postgres.conf:/etc/postgresql/postgresql.conf
+
+  web:
+    build: .
+    command: ./py_runserver.sh
+    volumes:
+      - .:/code
+    ports:
+      - 8000:8000
+    links:
+      - db
+      - redis
+    depends_on:
+      - db
+
+  worker:
+    build: .
+    command: ./run_celery.sh
+    user: nobody
+    ports:
+      - 5555:5555
+    volumes:
+      - .:/code
+    links:
+      - db
+      - redis
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:6.0.1
+    hostname: redis
+    environment:
+      - ALLOW_EMPTY_PASSWORD=yes
+      - REDIS_DISABLE_COMMANDS=FLUSHDB,FLUSHALL
+    ports:
+      - 6379:6379
+    volumes:
+      - ./redis/redis.conf:/etc/redis.conf
+      - ./redis/data:/data
+    command: >
+      bash -c "echo 1024 > /proc/sys/net/core/somaxconn
+      && echo 'vm.overcommit_memory = 1' >> /etc/sysctl.conf
+      && redis-server /etc/redis.conf --appendonly yes"
+    restart: always
+    privileged: true
+
+volumes:
+  postgres:
+  redis:
